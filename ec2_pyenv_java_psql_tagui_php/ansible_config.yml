@@ -1,0 +1,284 @@
+---
+
+- name: Configure EC2 environment
+  hosts: all
+#  become: true
+  gather_facts: no
+  vars:
+     - install_python: true
+     - update_packages: true
+     - install_others: true
+  tasks:
+
+
+# ------------------------ others  --------------------------------------
+     - name: Update packages
+       become: true
+       ansible.builtin.dnf:
+          name: "*"
+          state: latest
+       when: update_packages
+
+     - name: Install packages
+       become: true
+       ansible.builtin.dnf:
+          name: "{{ item }}"
+          state: present
+       loop:
+         - git
+#         - postgresql16-server
+         - php
+         - java-21-amazon-corretto-headless
+         - '@Development tools'
+         - zlib-devel
+         - bzip2
+         - bzip2-devel
+         - readline-devel
+         - sqlite
+         - sqlite-devel
+         - openssl-devel
+         - libffi-devel
+       when: install_others
+
+
+# ------------------------ postgresql - setup --------------------------------------
+     - name: "Postgresql[Verify installation]"
+       ansible.builtin.shell: psql --version
+       register: postgres_version
+       ignore_errors: yes
+       
+     - name: "Postgresql[ print version]"
+       ansible.builtin.debug:
+          msg: "postgres_version = {{ postgres_version }}" 
+       when: postgres_version.rc == 0
+
+     - name: "Postgresql[installation]"
+       become: true
+       ansible.builtin.dnf:
+          name: "postgresql16-server"
+       when: postgres_version.rc != 0
+       
+     - name: "Postgresql [initdb]"
+       become: true
+       ansible.builtin.command: "postgresql-setup --initdb"
+       when: postgres_version.rc != 0
+
+     - name: "Postgresql [Enable and start PostgreSQL service]"
+       become: true
+       ansible.builtin.service:
+          name: postgresql
+          state: started
+          enabled: yes
+       when: postgres_version.rc != 0
+
+     - name: "Postgresql [Replace a localhost in postgresql.conf"
+       become: true
+       ansible.builtin.lineinfile:
+          path: /var/lib/pgsql/data/postgresql.conf
+          search_string: "listen_addresses = 'localhost'"
+          line: "listen_addresses = '*'"
+       when: postgres_version.rc != 0
+
+     - name: "Postgresql [change pg_hba.conf}"
+       become: true
+       ansible.builtin.lineinfile:
+          path: /var/lib/pgsql/data/pg_hba.conf
+          search_string: "{{ item.search_str }}"
+          line: "{{ item.replace_str }}"
+       when: postgres_version.rc != 0
+       loop:
+          - search_str: "local   all             all                                     peer"
+            replace_str: "local   all             all                                     md5"
+          - search_str: "host    all             all             127.0.0.1/32            ident"
+            replace_str: "host    all             all             0.0.0.0/0            md5"
+
+     - name: "Postgresql [ Restart PostgreSQL service]"
+       become: true
+       ansible.builtin.service:
+          name: postgresql
+          state: restarted
+       when: postgres_version.rc != 0
+
+
+
+# ------------------------ python  --------------------------------------
+     - name: "Python [check version 3.12.7]"
+       ansible.builtin.command: "python3 --version"
+       register: python_version
+
+     - name: "python[ print version ]"
+       ansible.builtin.debug:
+          msg: "python version = {{python_version.stdout}}"
+       when: python_version.stdout == 'Python 3.12.7'
+
+     - name: "python[ Install pyenv for the current user ]"
+       ansible.builtin.shell: |
+          curl https://pyenv.run | bash
+       args:
+          creates: " /home/ec2-user/.pyenv"
+       when: python_version.stdout != 'Python 3.12.7'
+
+     - name: "python[ Configure pyenv in the shell environment ]"
+       ansible.builtin.lineinfile:
+          path: /home/ec2-user/.bashrc
+          line: |
+             export PATH="/home/ec2-user/.pyenv/bin:$PATH"
+             eval "$(pyenv init --path)"
+             eval "$(pyenv init -)"
+             eval "$(pyenv virtualenv-init -)"
+          state: present
+       when: python_version.stdout != 'Python 3.12.7'
+
+     - name: "python [ Reload bashrc ]"
+       ansible.builtin.shell: |
+          source /home/ec2-user/.bashrc
+       args:
+          executable: /bin/bash
+       when: python_version.stdout != 'Python 3.12.7'
+
+     - name: "python [ Install Python 3.12.7 using pyenv ]"
+       ansible.builtin.shell: |
+          export PATH="/home/ec2-user/.pyenv/bin:$PATH"
+          eval "$(pyenv init --path)"
+          eval "$(pyenv init -)"
+          eval "$(pyenv virtualenv-init -)"
+          pyenv install 3.12.7
+          pyenv global 3.12.7
+       when: python_version.stdout != 'Python 3.12.7'
+
+
+# ------------------------ TAG UI --------------------------------------
+     - name: "TagUI[ Verify installation ]"
+       ansible.builtin.shell: tagui
+       register: tagui_version
+       ignore_errors: yes
+
+     - name: "TagUI[ download binaries ]"
+       ansible.builtin.uri:
+          url: https://github.com/kelaberetiv/TagUI/releases/download/v6.110.0/TagUI_Linux.zip
+          dest: "~"
+       when: tagui_version.rc != 1
+
+     - name: "TagUI[ unzip binaries ]"
+       ansible.builtin.unarchive:
+          src:  "~/TagUI_Linux.zip"
+          dest: "~/"
+          remote_src: true
+       when: tagui_version.rc != 1
+
+     - name: "TagUI[ Create symbolic link ]"
+       become: yes
+       ansible.builtin.file:
+          src: "/home/ec2-user/tagui/src/tagui"
+          dest: /usr/local/bin/tagui
+          state: link
+       when: tagui_version.rc != 1
+
+     - name: "TagUI[ Update ]"
+       ansible.builtin.command: tagui update
+       when: tagui_version.rc != 1
+
+# ------------------------ Google Chrome --------------------------------------
+     - name: "Google-Chrome[Verify installation]"
+       ansible.builtin.shell: google-chrome --version
+       register: chrome_version
+       ignore_errors: yes
+
+     - name: "Google-Chrome[ print version ]"
+       ansible.builtin.debug:
+          msg: "chrome-version = {{chrome_version.stdout}}"
+       when: chrome_version.rc == 0
+
+     - name: "Google-Chrome[ Add rpm key ]"
+       become: true
+       ansible.builtin.rpm_key:
+          key: "https://dl.google.com/linux/linux_signing_key.pub"
+          state: present
+       when: chrome_version.rc != 0
+
+
+     - name: "Google-Chrome[ download ]"
+       become: true
+       ansible.builtin.uri:
+          url: https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
+          dest: "/home/ec2-user/"
+       when: chrome_version.rc != 0
+
+     - name: "Google-Chrome[ install ]"
+       become: true
+       ansible.builtin.dnf:
+          name: "/home/ec2-user/google-chrome-stable_current_x86_64.rpm"
+          state: present
+          disable_gpg_check: yes
+       when: chrome_version.rc != 0
+
+
+# ------------------------ Nodejs --------------------------------------
+     - name: "Nodejs[Verify installation]"
+       ansible.builtin.shell: node --version
+       register: node_version
+       ignore_errors: yes
+
+     - name: "Nodejs[ print version ]"
+       ansible.builtin.debug:
+          msg: "node-version = {{node_version.stdout}}"
+       when: node_version.rc == 0
+
+     - name: "Nodejs[ Add Node.js repository for Amazon Linux ]"
+       ansible.builtin.shell: "curl -sL https://rpm.nodesource.com/setup_20.x | bash - "
+       when: node_version.rc != 0
+
+     - name: "Nodejs[ install ]"
+       become: true
+       ansible.builtin.dnf:
+          name: nodejs
+          state: present
+       when: node_version.rc != 0
+
+# ------------------------ NPM --------------------------------------
+     - name: "Npm[Verify installation]"
+       ansible.builtin.shell: npm --version
+       register: npm_version
+       ignore_errors: yes
+
+     - name: "Npm[ print version ]"
+       ansible.builtin.debug:
+          msg: "npm-version = {{npm_version.stdout}}"
+       when: npm_version.rc == 0
+
+     - name: "npm [installation]"
+       ansible.builtin.shell: |
+         npm install -g npm@10.8.2
+       args:
+         creates: /usr/local/lib/node_modules/npm
+       when: npm_version.rc != 0
+
+# ------------------------ pm2  --------------------------------------
+     - name: "pm2[Verify installation]"
+       ansible.builtin.shell: pm2 --version
+       register: pm2_version
+       ignore_errors: yes
+
+     - name: "pm2[ print version ]"
+       ansible.builtin.debug:
+          msg: "pm2-version = {{pm2_version.stdout}}"
+       when: pm2_version.rc == 0
+
+     - name: "pm2[Install PM2]"
+       become: true
+       ansible.builtin.shell: |
+          npm install -g pm2@5.4.3
+       args:
+          creates: /usr/local/lib/node_modules/pm2
+       when: pm2_version.rc != 0
+
+
+# ------------------------ python  --------------------------------------
+#     - name: Install pyenv for the current user
+#       ansible.builtin.shell: |
+#          curl https://pyenv.run | bash
+#       args:
+#          creates: " /home/ec2-user/.pyenv"
+
+
+#sudo yum localinstall -y google-chrome-stable_current_x86_64.rpm
