@@ -1,0 +1,163 @@
+resources:
+   - apiVersion: batch/v1
+     kind: CronJob
+     metadata:
+       name: keycloak-postgresdb-s3-backup-cron
+     spec:
+       timeZone: 'US/Eastern' 
+       schedule: "5 20 * * *"
+       successfulJobsHistoryLimit: 1
+       failedJobsHistoryLimit: 1
+       jobTemplate:
+         spec:
+           activeDeadlineSeconds: 3600
+           template:
+             spec:
+               containers:
+               - name: keycloak-postgresdb-s3-backup
+                 image: snagurum/postgres_backup
+                 env:
+                 - name: S3_PREFIX
+                   value: dev/keycloak
+                 - name: S3_BUCKET
+                   value: postgresql-db-backup
+                 - name: POSTGRES_DATABASE
+                   valueFrom:
+                      secretKeyRef:
+                        name: keycloak-dev-credentials     
+                        key: database
+                 - name: POSTGRES_HOST
+                   valueFrom:
+                      secretKeyRef:
+                        name: keycloak-dev-credentials
+                        key: host
+                 - name: POSTGRES_USER
+                   valueFrom:
+                      secretKeyRef:
+                        name: keycloak-dev-credentials
+                        key: user
+                 - name: POSTGRES_PASSWORD
+                   valueFrom:
+                      secretKeyRef:
+                        name: keycloak-dev-credentials
+                        key: password
+                 - name: S3_ACCESS_KEY_ID
+                   valueFrom:
+                      secretKeyRef:
+                        name: postgresdb-s3-key
+                        key: s3-access-key-id
+                 - name: S3_SECRET_ACCESS_KEY
+                   valueFrom:
+                      secretKeyRef:
+                        name: postgresdb-s3-key
+                        key: s3-secret-access-key
+               restartPolicy: Never
+
+   - apiVersion: batch/v1
+     kind: CronJob
+     metadata:
+       name: sonarqube-postgresdb-s3-backup-cron
+     spec:
+       timeZone: 'US/Eastern' 
+       schedule: "10 20 * * *"
+       successfulJobsHistoryLimit: 1
+       failedJobsHistoryLimit: 1
+       jobTemplate:
+         spec:
+           activeDeadlineSeconds: 3600
+           template:
+             spec:
+               containers:
+               - name: sonarqube-postgresdb-s3-backup
+                 image: snagurum/postgres_backup
+                 env:
+                 - name: S3_PREFIX
+                   value: dev/sonarqubedb
+                 - name: S3_BUCKET
+                   value: postgresql-db-backup
+                 - name: POSTGRES_DATABASE
+                   valueFrom:
+                      secretKeyRef:
+                        name: sonar-dev-credentials
+                        key: database
+                 - name: POSTGRES_HOST
+                   valueFrom:
+                      secretKeyRef:
+                        name: sonar-dev-credentials
+                        key: host
+                 - name: POSTGRES_USER
+                   valueFrom:
+                      secretKeyRef:
+                        name: sonar-dev-credentials
+                        key: user
+                 - name: POSTGRES_PASSWORD
+                   valueFrom:
+                      secretKeyRef:
+                        name: sonar-dev-credentials
+                        key: password
+                 - name: S3_ACCESS_KEY_ID
+                   valueFrom:
+                      secretKeyRef:
+                        name: postgresdb-s3-key
+                        key: s3-access-key-id
+                 - name: S3_SECRET_ACCESS_KEY
+                   valueFrom:
+                      secretKeyRef:
+                        name: postgresdb-s3-key
+                        key: s3-secret-access-key
+               restartPolicy: Never
+   - apiVersion: batch/v1
+     kind: CronJob
+     metadata:
+       name: usermgmt-postgresdb-s3-backup-cron
+     spec:
+       timeZone: 'US/Eastern' 
+       schedule: "15 20 * * *"
+       successfulJobsHistoryLimit: 1
+       failedJobsHistoryLimit: 1
+       jobTemplate:
+         spec:
+           activeDeadlineSeconds: 3600
+           template:
+             spec:
+               containers:
+               - name: usermgmt-postgresdb-s3-backup
+                 image: snagurum/postgres_backup
+                 env:
+                 - name: S3_PREFIX
+                   value: dev/usermgmtdb
+                 - name: S3_BUCKET
+                   value: postgresql-db-backup
+                 - name: POSTGRES_DATABASE
+                   valueFrom:
+                      secretKeyRef:
+                        name: usermgmt-dev-credentials
+                        key: database
+                 - name: POSTGRES_HOST
+                   valueFrom:
+                      secretKeyRef:
+                        name: usermgmt-dev-credentials
+                        key: host
+                 - name: POSTGRES_USER
+                   valueFrom:
+                      secretKeyRef:
+                        name: usermgmt-dev-credentials
+                        key: user
+                 - name: POSTGRES_PASSWORD
+                   valueFrom:
+                      secretKeyRef:
+                        name: usermgmt-dev-credentials
+                        key: password
+                 - name: S3_ACCESS_KEY_ID
+                   valueFrom:
+                      secretKeyRef:
+                        name: postgresdb-s3-key
+                        key: s3-access-key-id
+                 - name: S3_SECRET_ACCESS_KEY
+                   valueFrom:
+                      secretKeyRef:
+                        name: postgresdb-s3-key
+                        key: s3-secret-access-key
+               restartPolicy: Never
+          
+
